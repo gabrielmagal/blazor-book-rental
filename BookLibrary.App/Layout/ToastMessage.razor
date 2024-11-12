@@ -1,0 +1,42 @@
+﻿@using BookLibrary.App.Model
+
+@if (!string.IsNullOrEmpty(Toast?.Message))
+{
+    <div class="modal show d-block" tabindex="-1" role="dialog">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        @switch (Toast.TypeToast)
+                        {
+                            case TypeToast.ERROR:
+                                <span class="text-danger"><i class="icofont-warning-alt me-2"></i>Erro</span>
+                                break;
+                            case TypeToast.SUCCESS:
+                                <span class="text-success"><i class="icofont-check-circled me-2"></i>Sucesso</span>
+                                break;
+                        }
+                    </h5>
+                    @if (Dismiss.HasDelegate)
+                    {
+                        <button type="button" class="btn-close" aria-label="Close" onclick="@Dismiss"></button>
+                    }
+                </div>
+                <div class="modal-body" style="max-height: 300px; overflow-y: auto;">
+                    <p>@Toast.Message</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" @onclick="Dismiss">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public ToastModel? Toast { get; set; }
+
+    [Parameter]
+    public EventCallback Dismiss { get; set; }
+}

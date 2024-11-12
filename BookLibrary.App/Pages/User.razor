@@ -1,0 +1,245 @@
+﻿@page "/user"
+@using BookLibrary.App.Model
+@inject HttpClient Http
+
+<PageTitle>Books</PageTitle>
+
+<h1>Usuários</h1>
+
+<div>
+    <button class="btn btn-success" @onclick="() => HandleShowAdd()">Adicionar Usuário</button>
+</div>
+
+@if (users == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Usuário</th>
+                <th>Email</th>
+                <th>Data de Nascimento</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var user in users)
+            {
+                <tr>
+                    <td>@user.Username</td>
+                    <td>@user.Email</td>
+                    <td>@user.DateOfBirth</td>
+                    <td>
+                        <button class="btn btn-warning" @onclick="() => HandleShowEdit(user)">Editar</button>
+                        <button class="btn btn-danger" @onclick="() => HandleConfirmDelete(user.Id)">Remover</button>
+                        <button class="btn btn-secondary" @onclick="() => HandleHistory(user)">Histórico</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+<div class="mt-2">
+    <ToastMessage Toast="@Toast" Dismiss="(() => { this.Toast.Message = null; })" />
+</div>
+@if (modalViewModelUser.Exibir)
+{
+    <EditForm Model="modalViewModelUser.User" OnValidSubmit="HandleSubmit">
+        <DataAnnotationsValidator />
+        <div class="modal" tabindex="-1" style="display:block" role="dialog">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-body">
+                        <label>Usuário:</label>
+                        <input @bind="modalViewModelUser.User.Username" class="form-control" />
+                        <ValidationMessage For="@(() => modalViewModelUser.User.Username)" />
+
+                        <label>Email:</label>
+                        <input @bind="modalViewModelUser.User.Email" class="form-control" />
+                        <ValidationMessage For="@(() => modalViewModelUser.User.Email)" />
+
+                        <label>Data de nascimento:</label>
+                        <InputDate @bind-Value=modalViewModelUser.User.DateOfBirth />
+                        <ValidationMessage For="@(() => modalViewModelUser.User.DateOfBirth)" />
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">Salvar</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="modalViewModelUser.Fechar">Fechar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </EditForm>
+}
+@if (modalViewLogsRental.Exibir)
+{
+    <div class="modal" tabindex="-1" style="display:block" role="dialog">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-body">
+                    <ul class="list-group">
+                        <li class="list-group-item">Livros Alugados Anteriormente</li>
+                        <li class="list-group-item">
+                            <div style="max-height: 400px; overflow-y: auto;">
+                                <ul class="list-group">
+                                    @foreach (var logVersionTenant in modalViewLogsRental.Rentals)
+                                    {
+                                        <li class="list-group-item">
+                                            <div class="row align-items-center">
+                                                <div class="col-md-3">
+                                                    <strong>Livro:</strong> @logVersionTenant.Book.Name
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <strong>Autor:</strong> @logVersionTenant.Book.Author
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <strong>Custo: </strong>R$ @logVersionTenant.Book.Coast
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <strong>Saida:</strong> @logVersionTenant.RentalDate.ToString("dd/MM/yyyy HH:mm")
+                                                </div>
+                                                @if (logVersionTenant.ReturnDate != null)
+                                                {
+                                                    <div class="col-md-3">
+                                                        <strong>Retorno:</strong> @logVersionTenant.ReturnDate?.ToString("dd/MM/yyyy HH:mm")
+                                                    </div>
+                                                }
+                                            </div>
+                                        </li>
+                                    }
+                                </ul>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="modalViewLogsRental.Fechar">Fechar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+
+
+@code {
+    private UserModel[]? users;
+    private RentalModel[]? rentals;
+    private HttpClient _httpClient = new();
+    private ToastModel Toast = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        users = await ObtemUsers();
+    }
+
+    private void HandleShowAdd()
+    {
+        modalViewModelUser.Alteracao = false;
+        modalViewModelUser.Exibir = true;
+    }
+
+    private void HandleShowEdit(UserModel userModel)
+    {
+        modalViewModelUser.User = userModel;
+        modalViewModelUser.Alteracao = true;
+        modalViewModelUser.Exibir = true;
+    }
+
+    private async void HandleConfirmDelete(Guid id)
+    {
+        var response = await _httpClient.DeleteAsync($"http://localhost:5204/api/User/{id}");
+        if (response.IsSuccessStatusCode)
+        {
+            users = await ObtemUsers();
+        }
+        else
+        {
+            Toast.DefineToast(await response.Content.ReadAsStringAsync(), TypeToast.ERROR);
+        }
+        StateHasChanged();
+    }
+
+    private async void HandleHistory(UserModel userModel)
+    {
+        var response = await _httpClient.GetAsync($"http://localhost:5204/api/Rentals/user/{userModel.Id}");
+        if (response.IsSuccessStatusCode)
+        {
+            modalViewLogsRental.Rentals = await response.Content.ReadFromJsonAsync<RentalModel[]>() ?? [];
+            modalViewLogsRental.Exibir = true;
+        }
+        else
+        {
+            Toast.DefineToast(await response.Content.ReadAsStringAsync(), TypeToast.ERROR);
+        }
+        StateHasChanged();
+    }
+
+    private async void HandleSubmit()
+    {
+        HttpResponseMessage response;
+        if (modalViewModelUser.Alteracao)
+        {
+            response = await _httpClient.PutAsJsonAsync($"http://localhost:5204/api/User/{modalViewModelUser.User.Id}", modalViewModelUser.User);
+        }
+        else
+        {
+            response = await _httpClient.PostAsJsonAsync("http://localhost:5204/api/User", modalViewModelUser.User);
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            users = await ObtemUsers();
+            modalViewModelUser.Fechar();
+        }
+        else
+        {
+            Toast.DefineToast(await response.Content.ReadAsStringAsync(), TypeToast.ERROR);
+        }
+        StateHasChanged();
+    }
+
+    private async Task<UserModel[]> ObtemUsers()
+    {
+        var response = await _httpClient.GetAsync("http://localhost:5204/api/User");
+        if (response.IsSuccessStatusCode)
+        {
+            return await response.Content.ReadFromJsonAsync<UserModel[]>() ?? [];
+        }
+        else
+        {
+            Toast.DefineToast(await response.Content.ReadAsStringAsync(), TypeToast.ERROR);
+            return [];
+        }
+    }
+
+    private class ModalViewModelUser
+    {
+        public bool Exibir { get; set; } = false;
+        public bool Alteracao { get; set; } = false;
+        public UserModel User { get; set; } = new();
+
+        public void Fechar()
+        {
+            Exibir = false;
+        }
+    }
+
+    private class ModalViewLogsRental
+    {
+        public bool Exibir { get; set; } = false;
+        public RentalModel[] Rentals = [];
+
+        public void Fechar()
+        {
+            Exibir = false;
+        }
+    }
+
+    private ModalViewModelUser modalViewModelUser { get; set; } = new ModalViewModelUser();
+    private ModalViewLogsRental modalViewLogsRental { get; set; } = new ModalViewLogsRental();
+}

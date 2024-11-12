@@ -1,0 +1,171 @@
+﻿@page "/rental"
+@using BookLibrary.App.Model
+@inject HttpClient Http
+
+<PageTitle>Alugados</PageTitle>
+
+<h1>Alugados</h1>
+
+<div>
+    <button class="btn btn-success" @onclick="() => HandleShowAdd()">Alugar Livro</button>
+</div>
+
+@if (rentals == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Livro</th>
+                <th>Usuário</th>
+                <th>Data Saida</th>
+                <th>Data Retorno</th>
+                <th>Ação</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var rental in rentals)
+            {
+                <tr>
+                    <td>@rental.Book.Author</td>
+                    <td>@rental.User.Username</td>
+                    <td>@rental.RentalDate.ToShortDateString()</td>
+                    <td>@rental.ReturnDate?.ToShortDateString()</td>
+                    <td>
+                        @if (@rental.ReturnDate == null)
+                        {
+                            <button class="btn btn-success" @onclick="() => DevolveLivro(rental.BookId, rental.UserId)">Devolver</button>
+                        }
+                        else
+                        {
+                            <button class="btn btn-warning">Já devolvido</button>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+@if (modalViewModelRental.Exibir)
+{
+    <EditForm Model="modalViewModelRental.Rental" OnValidSubmit="HandleSubmit">
+        <DataAnnotationsValidator />
+        <div class="modal" tabindex="-1" style="display:block" role="dialog">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-body">
+                        <label>Usuários:</label>
+                        <InputSelect @bind-Value="modalViewModelRental.Rental.UserId" class="form-control">
+                            <option value="">Selecione um usuário</option>
+                            @foreach (var user in users)
+                            {
+                                <option value="@user.Id">@user.Username</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => modalViewModelRental.Rental.UserId)" />
+
+                        <label>Livros:</label>
+                        <InputSelect @bind-Value="modalViewModelRental.Rental.BookId" class="form-control">
+                            <option value="">Selecione um livro</option>
+                            @foreach (var book in books)
+                            {
+                                <option value="@book.Id">@book.Author</option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => modalViewModelRental.Rental.BookId)" />
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">Salvar</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="modalViewModelRental.Fechar">Fechar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    private HttpClient _httpClient = new();
+    private RentalModel[]? rentals;
+    private UserModel[]? users;
+    private BookModel[]? books;
+
+    protected override async Task OnInitializedAsync()
+    {
+        rentals = await ObtemRentals();
+        users = await ObtemUsers();
+        books = await ObtemBooks();
+    }
+
+    private void HandleShowAdd()
+    {
+        modalViewModelRental.Exibir = true;
+    }
+
+    private async Task DevolveLivro(Guid idLivro, Guid idUser)
+    {
+        var response = await _httpClient.PutAsync($"http://localhost:5204/api/Rentals/return?userId={idUser}&bookId={idLivro}", null);
+        if (response.IsSuccessStatusCode)
+        {
+            rentals = await ObtemRentals();
+        }
+    }
+
+    private async Task<RentalModel[]> ObtemRentals()
+    {
+        var response = await _httpClient.GetAsync("http://localhost:5204/api/Rentals");
+        if (response.IsSuccessStatusCode)
+        {
+            return await response.Content.ReadFromJsonAsync<RentalModel[]>() ?? [];
+        }
+        return [];
+    }
+
+    private async Task<UserModel[]> ObtemUsers()
+    {
+        var response = await _httpClient.GetAsync("http://localhost:5204/api/User");
+        if (response.IsSuccessStatusCode)
+        {
+            return await response.Content.ReadFromJsonAsync<UserModel[]>() ?? [];
+        }
+        return [];
+    }
+
+    private async Task<BookModel[]> ObtemBooks()
+    {
+        var response = await _httpClient.GetAsync("http://localhost:5204/api/Book");
+        if (response.IsSuccessStatusCode)
+        {
+            return await response.Content.ReadFromJsonAsync<BookModel[]>() ?? [];
+        }
+        return [];
+    }
+
+    private async void HandleSubmit()
+    {
+        HttpResponseMessage response = await _httpClient.PostAsync($"http://localhost:5204/api/Rentals/rent?userId={modalViewModelRental.Rental.UserId}&bookId={modalViewModelRental.Rental.BookId}", null);
+        if (response.IsSuccessStatusCode)
+        {
+            rentals = await ObtemRentals();
+        }
+        modalViewModelRental.Fechar();
+        StateHasChanged();
+    }
+
+    private class ModalViewModelRental
+    {
+        public bool Exibir { get; set; } = false;
+        public RentalModel Rental { get; set; } = new();
+
+        public void Fechar()
+        {
+            Exibir = false;
+        }
+    }
+
+    private ModalViewModelRental modalViewModelRental { get; set; } = new ModalViewModelRental();
+}

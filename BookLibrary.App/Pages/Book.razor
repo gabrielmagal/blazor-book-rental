@@ -1,0 +1,174 @@
+﻿@page "/book"
+@using BookLibrary.App.Model
+@inject HttpClient Http
+
+<PageTitle>Books</PageTitle>
+
+<h1>Livros</h1>
+
+<div>
+    <button class="btn btn-success" @onclick="() => HandleShowAdd()">Adicionar Livro</button>
+</div>
+
+@if (books == null)
+{
+    <p><em>Loading...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Nome</th>
+                <th>Autor</th>
+                <th>Data de lançamento</th>
+                <th>Custo</th>
+                <th>Ações</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var book in books)
+            {
+                <tr>
+                    <td>@book.Name</td>
+                    <td>@book.Author</td>
+                    <td>@book.ReleaseDate</td>
+                    <td>R$ @book.Coast</td>
+                    <td>
+                        <button class="btn btn-warning" @onclick="() => HandleShowEdit(book)">Editar</button>
+                        <button class="btn btn-danger" @onclick="() => HandleConfirmDelete(book.Id)">Remover</button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+<div class="mt-2">
+    <ToastMessage Toast="@Toast" Dismiss="(() => { this.Toast.Message = null; })" />
+</div>
+@if (modalViewModelBook.Exibir)
+{
+    <EditForm Model="modalViewModelBook.Livro" OnValidSubmit="HandleSubmit">
+        <DataAnnotationsValidator />
+        <div class="modal" tabindex="-1" style="display:block" role="dialog">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-body">
+                        <label>Nome:</label>
+                        <input @bind="modalViewModelBook.Livro.Name" class="form-control" />
+                        <ValidationMessage For="@(() => modalViewModelBook.Livro.Name)" />
+
+                        <label>Autor:</label>
+                        <input @bind="modalViewModelBook.Livro.Author" class="form-control" />
+                        <ValidationMessage For="@(() => modalViewModelBook.Livro.Author)" />
+
+                        <label>Data de lançamento:</label>
+                        <br />
+                        <InputDate Type="InputDateType.DateTimeLocal" class="form-eliment" @bind-Value="modalViewModelBook.Livro.ReleaseDate" />
+                        <ValidationMessage For="@(() => modalViewModelBook.Livro.ReleaseDate)" />
+                        <br />
+
+                        <label>Valor:</label>
+                        <input @bind="modalViewModelBook.Livro.Coast" class="form-control" />
+                        <ValidationMessage For="@(() => modalViewModelBook.Livro.Coast)" />
+                    </div>
+
+                    <div class="modal-footer">
+                        <button type="submit" class="btn btn-sm btn-outline-primary">Salvar</button>
+                        <button type="button" class="btn btn-sm btn-outline-danger" @onclick="modalViewModelBook.Fechar">Fechar</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </EditForm>
+}
+
+@code {
+    private BookModel[]? books;
+    private HttpClient _httpClient = new();
+    private ToastModel Toast = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        books = await ObtemBooks();
+    }
+
+    private void HandleShowAdd()
+    {
+        modalViewModelBook.Alteracao = false;
+        modalViewModelBook.Exibir = true;
+    }
+
+    private void HandleShowEdit(BookModel bookModel)
+    {
+        modalViewModelBook.Livro = bookModel;
+        modalViewModelBook.Alteracao = true;
+        modalViewModelBook.Exibir = true;
+    }
+
+    private async void HandleConfirmDelete(Guid id)
+    {
+        var response = await _httpClient.DeleteAsync($"http://localhost:5204/api/Book/{id}");
+        if (response.IsSuccessStatusCode)
+        {
+            books = await ObtemBooks();
+        }
+        else
+        {
+            Toast.DefineToast(await response.Content.ReadAsStringAsync(), TypeToast.ERROR);
+        }
+        StateHasChanged();
+    }
+
+    private async void HandleSubmit()
+    {
+        HttpResponseMessage response;
+        if(modalViewModelBook.Alteracao)
+        {
+            response = await _httpClient.PutAsJsonAsync($"http://localhost:5204/api/Book/{modalViewModelBook.Livro.Id}", modalViewModelBook.Livro);
+        }
+        else
+        {
+            response = await _httpClient.PostAsJsonAsync("http://localhost:5204/api/Book", modalViewModelBook.Livro);
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            books = await ObtemBooks();
+            modalViewModelBook.Fechar();
+        }
+        else
+        {
+            Toast.DefineToast(await response.Content.ReadAsStringAsync(), TypeToast.ERROR);
+        }
+        StateHasChanged();
+    }
+
+    private async Task<BookModel[]> ObtemBooks()
+    {
+        var response = await _httpClient.GetAsync("http://localhost:5204/api/Book");
+        if (response.IsSuccessStatusCode)
+        {
+            return await response.Content.ReadFromJsonAsync<BookModel[]>() ?? [];
+        }
+        else
+        {
+            Toast.DefineToast(await response.Content.ReadAsStringAsync(), TypeToast.ERROR);
+            return [];
+        }
+    }
+
+    private class ModalViewModelBook
+    {
+        public bool Exibir { get; set; } = false;
+        public bool Alteracao { get; set; } = false;
+        public BookModel Livro { get; set; } = new();
+
+        public void Fechar()
+        {
+            Exibir = false;
+        }
+    }
+
+    private ModalViewModelBook modalViewModelBook { get; set; } = new ModalViewModelBook();
+}
